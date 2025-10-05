@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: nova-ai-assistant
+    env: python
+    plan: free
+    buildCommand: "pip install --upgrade pip && pip install --prefer-binary -r requirements.txt"
+    startCommand: "gunicorn app:app"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.12
+      - key: ASSEMBLYAI_API_KEY
+        sync: false
+      - key: WOLFRAM_ALPHA_APP_ID
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GOOGLE_SEARCH_ENGINE_ID
+        sync: false
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
