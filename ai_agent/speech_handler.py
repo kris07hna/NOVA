@@ -49,13 +49,15 @@ class SpeechHandler:
         """Initialize AssemblyAI"""
         try:
             import assemblyai as aai
+            self.assemblyai_key = os.getenv('ASSEMBLYAI_API_KEY')
             if self.assemblyai_key:
                 aai.settings.api_key = self.assemblyai_key
-                logger.info("AssemblyAI initialized")
+                logger.info("AssemblyAI initialized successfully")
             else:
-                logger.warning("AssemblyAI API key not found")
+                logger.warning("ASSEMBLYAI_API_KEY not found in environment variables")
         except Exception as e:
             logger.error(f"Failed to initialize AssemblyAI: {str(e)}")
+            self.assemblyai_key = None
     
     def audio_to_text(self, audio_file):
         """
@@ -118,14 +120,27 @@ class SpeechHandler:
             str: Transcribed text or None
         """
         if not self.assemblyai_key:
-            logger.error("AssemblyAI API key not configured")
+            logger.error("AssemblyAI API key not configured. Please set ASSEMBLYAI_API_KEY environment variable.")
             return None
         
         try:
             import assemblyai as aai
             
-            # Save uploaded file temporarily
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
+            # Re-initialize API key in case it wasn't set during init
+            aai.settings.api_key = self.assemblyai_key
+            
+            # Determine file extension from the uploaded file
+            file_ext = '.webm'  # Default to webm (most common from browsers)
+            if hasattr(audio_file, 'filename'):
+                if audio_file.filename.endswith('.wav'):
+                    file_ext = '.wav'
+                elif audio_file.filename.endswith('.mp3'):
+                    file_ext = '.mp3'
+                elif audio_file.filename.endswith('.webm'):
+                    file_ext = '.webm'
+            
+            # Save uploaded file temporarily with correct extension
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_audio:
                 if hasattr(audio_file, 'save'):
                     audio_file.save(temp_audio.name)
                 else:
@@ -135,19 +150,23 @@ class SpeechHandler:
                 temp_path = temp_audio.name
             
             try:
-                # Configure transcription
+                # Configure transcription - removed language_detection to avoid empty audio error
                 config = aai.TranscriptionConfig(
-                    speech_model=aai.SpeechModel.universal,
-                    language_detection=True,
+                    speech_model=aai.SpeechModel.best,
+                    language_code="en",  # Explicitly set to English
                 )
                 
                 # Transcribe
-                logger.info("Transcribing audio with AssemblyAI...")
+                logger.info(f"Transcribing audio with AssemblyAI (format: {file_ext})...")
                 transcriber = aai.Transcriber(config=config)
                 transcript = transcriber.transcribe(temp_path)
                 
                 if transcript.status == aai.TranscriptStatus.error:
                     logger.error(f"AssemblyAI transcription failed: {transcript.error}")
+                    return None
+                
+                if not transcript.text or transcript.text.strip() == "":
+                    logger.warning("AssemblyAI returned empty transcript")
                     return None
                 
                 logger.info(f"Transcribed text: {transcript.text}")

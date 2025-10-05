@@ -172,10 +172,23 @@ async function handleAssemblyAIRecording() {
     } else {
         // Start recording
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    channelCount: 1,
+                    sampleRate: 16000,
+                    echoCancellation: true,
+                    noiseSuppression: true
+                } 
+            });
             
             audioChunks = [];
-            mediaRecorder = new MediaRecorder(stream);
+            
+            // Try to use specific MIME type for better compatibility
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+                ? 'audio/webm;codecs=opus'
+                : 'audio/webm';
+            
+            mediaRecorder = new MediaRecorder(stream, { mimeType });
             
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -193,8 +206,8 @@ async function handleAssemblyAIRecording() {
                 // Stop all tracks
                 stream.getTracks().forEach(track => track.stop());
                 
-                // Create audio blob
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                // Create audio blob with correct MIME type
+                const audioBlob = new Blob(audioChunks, { type: mimeType });
                 
                 // Send to server for transcription
                 await transcribeAudio(audioBlob);
@@ -221,7 +234,9 @@ async function transcribeAudio(audioBlob) {
         setStatus('🔄 Transcribing with AssemblyAI...');
         
         const formData = new FormData();
-        formData.append('audio', audioBlob, 'recording.wav');
+        // Use .webm extension to match the actual format
+        const filename = audioBlob.type.includes('webm') ? 'recording.webm' : 'recording.wav';
+        formData.append('audio', audioBlob, filename);
         
         const response = await fetch(`${API_BASE_URL}/api/speech-to-text`, {
             method: 'POST',
